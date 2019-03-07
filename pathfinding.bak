@@ -1,0 +1,333 @@
+program pathfinding;
+
+uses crt, SDL2;
+
+//SDL2 en plus d'être plus performant que la version 1.2 apporte son lot de nouvelles fonctionnalités,
+//Telles que:
+//-Support de multiples fenêtres
+//-Accélération matérielle 3D complète
+//-Support d'OpenGL 3.0 et supérieur avec de nombreux profils (core, compatibility, debug, robust, etc.)
+//-Support d'OpenGL ES
+//-Support d'Android et IOS
+//-Support de multiples moniteurs
+//-Support de multiples périphériques audio
+//-Bibliothèque de rendus simple 2D pouvant utiliser Direct3D, OpenGL, OpenGL ES ou un rendu logiciel
+//-Gestion de l'énergie (indique l'autonomie de la batterie, etc.)
+//-Support de XInput et XAudio 2 pour Windows
+//-Opérations atomiques
+//-Fenêtre aux formes personnalisées
+//-Audio 32 bits
+//-Bibliothèque simplifiée pour les manettes de jeu
+//-Support du toucher (multi-touch, mouvements, etc.)
+//-Meilleur support du mode plein écran
+//-Meilleur support du clavier
+//-Boîtes de messages
+//-Support du presse-papier
+//-Support basique du glisser/déposer
+//-Support correct des entrées Unicode et IME
+//-Une macro puissante d'assertion
+//-De nombreux ennuis ont disparu depuis la SDL 1.2
+//Et beaucoup d'autres choses
+type
+PSDL_Rect = ^TSDL_Rect;
+TSDL_Rect = record
+    x,y: SInt32;
+    w,h: SInt32;
+end;
+
+type
+PPositioncharacter = ^TPositioncharacter;
+TPositioncharacter = record
+    x,y: integer;
+end;
+
+const
+size_max_row = 9;
+size_max_column = 9;
+var
+window: PSDL_Window;
+renderer: PSDL_Renderer;
+
+wall: PSDL_Surface;
+grass: PSDL_Surface;
+character: PSDL_Surface;
+
+walltexture: PSDL_Texture;
+grasstexture: PSDL_Texture;
+charactertexture: PSDL_Texture;
+
+emplacement: TSDL_Rect;
+
+tab: array[0..size_max_row,0..size_max_column] of integer = (
+            (1,2,1,1,1,1,1,1,1,1),
+            (1,0,1,1,1,0,0,0,1,1),
+            (1,0,1,1,1,0,1,0,1,1),
+            (1,0,1,1,1,0,1,0,1,1),
+            (1,0,0,0,0,0,1,0,1,1),
+            (1,1,1,1,1,1,1,0,1,1),
+            (1,0,0,0,0,0,0,0,1,1),
+            (1,0,1,1,1,1,1,1,1,1),
+            (1,0,0,0,0,0,0,0,0,1),
+            (1,1,1,1,1,1,1,1,0,1));
+i,j: integer;
+
+event: PSDL_Event;
+exitloop: boolean = false;
+up: boolean;
+down: boolean;
+left: boolean;
+right: boolean;
+
+positionsanta: TPositioncharacter;
+
+procedure Showtab;
+    begin
+        for i:=0 to size_max_column do
+        begin
+            for j:=0 to size_max_row do
+            begin
+                emplacement.x := j*50;
+                emplacement.y := i*50;
+                emplacement.w := 50;
+                emplacement.h := 50;
+                if (tab[i][j] = 0) then
+                begin
+                    SDL_RenderCopy(renderer, grasstexture, @emplacement, nil);
+                    SDL_RenderCopy(renderer, grasstexture,nil, @emplacement);
+                end;
+                if (tab[i][j] = 1) then
+                begin
+                    SDL_RenderCopy(renderer, walltexture, @emplacement, nil);
+                    SDL_RenderCopy(renderer, walltexture,nil, @emplacement);
+                end;
+                if (tab[i][j] = 2) then
+                begin
+                    positionsanta.x := i;
+                    positionsanta.y := j;
+                    SDL_RenderCopy(renderer, grasstexture, @emplacement, nil);
+                    SDL_RenderCopy(renderer, grasstexture,nil, @emplacement);
+                    SDL_RenderCopy(renderer, charactertexture, @emplacement, nil);
+                    SDL_RenderCopy(renderer, charactertexture,nil, @emplacement);
+                end;
+            end;
+
+        end;
+    end;
+
+procedure InitSDL;
+begin
+    if (SDL_Init(SDL_INIT_VIDEO)) < 0)  then
+    begin
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, 'Error Box',  SDL_GetError, nil);
+        HALT;
+    end
+    else
+    begin
+            writeln('Subsystems initialised !..');
+    end;
+end;
+procedure CreateWindowSDL;
+begin
+    window := SDL_CreateWindow('Pathfinding', SDL_WindowPos_undefined, SDL_WindowPos_undefined, 500, 500, SDL_WINDOW_SHOWN);
+    if (window = nil) then
+    begin
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, 'Error Box',  SDL_GetError, nil);
+        HALT;
+    end
+    else
+    begin
+        writeln('Window created !..');
+    end;
+
+    renderer := SDL_CreateRenderer(window, -1, 1);
+    if (renderer = nil) then
+    begin
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, 'Error Box',  SDL_GetError, nil);
+        HALT;
+    end
+    else
+    begin
+        writeln('Renderer created !..');
+    end;
+end;
+
+procedure CreateTextureSDL;
+begin
+    wall:=SDL_LoadBMP('Images/wall.bmp');
+    grass:=SDL_LoadBMP('Images/grass.bmp');
+    character:=SDL_LoadBMP('Images/santa.bmp');
+    if ((wall = nil) or (grass = nil)) then
+    begin
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, 'Error Box',  SDL_GetError, nil);
+        HALT;
+    end
+    else
+    begin
+        writeln('Surface created !..');
+    end;
+
+    walltexture:=SDL_CreateTextureFromSurface(renderer,wall);
+    grasstexture:=SDL_CreateTextureFromSurface(renderer,grass);
+    charactertexture:=SDL_CreateTextureFromSurface(renderer,character);
+    if ((walltexture = nil) or (grasstexture = nil) or (charactertexture = nil)) then
+    begin
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, 'Error Box',  SDL_GetError, nil);
+        HALT;
+    end
+    else
+    begin
+        writeln('Texture created !..');
+    end;
+end;
+
+procedure DestroySDL;
+begin
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_DestroyTexture(walltexture);
+    SDL_DestroyTexture(grasstexture);
+    SDL_FreeSurface(wall);
+    SDL_FreeSurface(grass);
+end;
+
+procedure DisplayRenderer;
+begin
+     SDL_RenderPresent(renderer);
+end;
+
+procedure movecharacter;
+begin
+    if (up = true) and (tab[positionsanta.x-1][positionsanta.y] = 0) then
+    begin
+        tab[positionsanta.x][positionsanta.y] := 0;
+        tab[positionsanta.x-1][positionsanta.y] := 2;
+        positionsanta.x:=positionsanta.x-1;
+    end;
+
+    if (down = true) and (tab[positionsanta.x+1][positionsanta.y] = 0) then
+    begin
+        tab[positionsanta.x][positionsanta.y] := 0;
+        tab[positionsanta.x+1][positionsanta.y] := 2;
+        positionsanta.x:=positionsanta.x+1;
+    end;
+
+    if (left = true) and (tab[positionsanta.x][positionsanta.y-1] = 0) then
+    begin
+        tab[positionsanta.x][positionsanta.y] := 0;
+        tab[positionsanta.x][positionsanta.y-1] := 2;
+        positionsanta.y:=positionsanta.y-1;
+    end;
+
+    if (right = true) and (tab[positionsanta.x][positionsanta.y+1] = 0) then
+    begin
+        tab[positionsanta.x][positionsanta.y] := 0;
+        tab[positionsanta.x][positionsanta.y+1] := 2;
+        positionsanta.y:=positionsanta.y+1;
+    end;
+
+end;
+
+procedure ManagerEvent;
+begin
+    new(event);
+
+    while (exitloop = false) do
+    begin
+        while (SDL_PollEvent(event) = 1) do
+        begin
+            case event^.type_ of
+                SDL_KEYUP:
+                begin // SDL_KEYUP
+                    writeln('Keycode: ',event^.key.keysym.sym);
+                    writeln('Keyname: ',SDL_GetKeyName(event^.key.keysym.sym));
+
+                      if (event^.key.keysym.sym = 122) then
+                        begin
+                            writeln('Z is up');
+                            up := false;
+                            movecharacter;
+                        end;
+
+                        if (event^.key.keysym.sym = 115) then
+                        begin
+                            writeln('S is up');
+                            down := false;
+                            movecharacter;
+                        end;
+
+                        if (event^.key.keysym.sym = 113) then
+                        begin
+                            writeln('Q is up');
+                            left := false;
+                            movecharacter;
+                        end;
+
+                        if (event^.key.keysym.sym = 100) then
+                        begin
+                            writeln('D is up');
+                            right := false;
+                            movecharacter;
+                        end;
+                end;
+
+                SDL_KEYDOWN:
+                begin// SDL_KEYDOWN
+                    writeln('Keycode: ',event^.key.keysym.sym);
+                    writeln('Keyname: ',SDL_GetKeyName(event^.key.keysym.sym));
+                      if (event^.key.keysym.sym = 122) then
+                         begin
+                            writeln('Z is pressed');
+                            up := true;
+                            movecharacter;
+                            Showtab;
+                            DisplayRenderer;
+                        end;
+
+                        if (event^.key.keysym.sym = 115) then
+                        begin
+                            writeln('S is pressed');
+                            down := true;
+                            movecharacter;
+                            Showtab;
+                            DisplayRenderer;
+                        end;
+
+                        if (event^.key.keysym.sym = 113) then
+                        begin
+                            writeln('Q is pressed');
+                            left := true;
+                            movecharacter;
+                            Showtab;
+                            DisplayRenderer;
+                        end;
+
+                        if (event^.key.keysym.sym = 100) then
+                        begin
+                            writeln('D is pressed');
+                            right := true;
+                            movecharacter;
+                            Showtab;
+                            DisplayRenderer;
+                        end;
+                end;
+            end;
+            case event^.key.keysym.sym of
+                SDLK_ESCAPE: exitloop := true;
+            end;
+        end;
+    end;
+    dispose(event);
+end;
+
+BEGIN
+    ClrScr();
+    InitSDL();
+    CreateWindowSDL();
+    CreateTextureSDL();
+    Showtab();
+    DisplayRenderer();
+    ManagerEvent();
+    DestroySDL();
+    readln();
+    SDL_Quit;
+END.
